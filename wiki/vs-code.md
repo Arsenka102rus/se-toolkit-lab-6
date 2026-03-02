@@ -79,11 +79,12 @@
 
 ## What is `VS Code`
 
-`Visual Studio Code` (`VS Code`) is a free, open-source code editor made by `Microsoft`. It provides features like syntax highlighting, a built-in [terminal](#vs-code-terminal), [extensions](#extensions), and [`Git`](./git.md) integration.
+`VS Code` (`Visual Studio Code`) is a free, open-source code editor made by `Microsoft`. It provides features like syntax highlighting, a built-in [terminal](#vs-code-terminal), [extensions](#extensions), and [`Git`](./git.md) integration.
 
 Docs:
 
 - [Visual Studio Code documentation](https://code.visualstudio.com/docs)
+- [`VS Code` on `GitHub`](https://github.com/microsoft/vscode)
 
 ## `Basic Layout`
 
