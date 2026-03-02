@@ -15,7 +15,7 @@ Example of the file: [`docker-compose.yml`](../docker-compose.yml).
 
 See also:
 
-- [`Docker`](./docker.md) for general `Docker` concepts ([images](./docker.md#image), [containers](./docker.md#container), [volumes](./docker.md#volumes), [health checks](./docker.md#health-checks), etc.).
+- [`Docker`](./docker.md) for general `Docker` concepts ([images](./docker.md#image), [containers](./docker.md#container), [volumes](./docker.md#volume), [health checks](./docker.md#health-checks), etc.).
 
 ## Service
 

@@ -19,7 +19,7 @@
     - [`docker ps` useful variants](#docker-ps-useful-variants)
 - [`Docker Compose`](#docker-compose)
   - [Service](#service)
-- [Volumes](#volumes)
+- [Volume](#volume)
 - [Health checks](#health-checks)
 - [`DockerHub`](#dockerhub)
   - [`<your-dockerhub-username>`](#your-dockerhub-username)
@@ -177,7 +177,7 @@ A service is a named entry under the `services:` key in `docker-compose.yml`. It
 
 For example, this project defines four services in [`docker-compose.yml`](../docker-compose.yml): `app`, `postgres`, `pgadmin`, and `caddy`.
 
-## Volumes
+## Volume
 
 A volume is persistent storage managed by `Docker`. Data in a volume survives container restarts.
 
