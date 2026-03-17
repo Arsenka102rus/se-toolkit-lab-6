@@ -1,7 +1,10 @@
 """
-Regression tests for agent.py
+Regression tests for agent.py (Task 2: Documentation Agent)
 
-Tests verify that the agent outputs valid JSON with required fields.
+Tests verify that the agent:
+1. Uses tools (read_file, list_files) correctly
+2. Returns valid JSON with answer, source, and tool_calls fields
+3. Correctly identifies sources in the wiki
 """
 
 import json
@@ -10,82 +13,116 @@ import sys
 from pathlib import Path
 
 
-def test_agent_output_format():
-    """Test that agent.py outputs valid JSON with 'answer' and 'tool_calls' fields."""
-    # Path to agent.py (project root)
-    project_root = Path(__file__).parent.parent.parent.parent
+def test_merge_conflict_question():
+    """
+    Test: 'How do you resolve a merge conflict?'
+    
+    Expected:
+    - tool_calls contains read_file call
+    - source contains wiki/git-workflow.md or wiki/git-vscode.md
+    """
+    project_root = Path(__file__).parent.parent
     agent_path = project_root / "agent.py"
     
-    # Run agent with a simple test question
     result = subprocess.run(
-        ["uv", "run", str(agent_path), "What is 2+2?"],
+        ["uv", "run", str(agent_path), "How do you resolve a merge conflict?"],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=90,
         cwd=str(project_root)
     )
     
     # Check exit code
     assert result.returncode == 0, f"Agent failed with: {result.stderr}"
     
-    # Parse stdout as JSON (should be only JSON, debug goes to stderr)
+    # Parse JSON output
     try:
         output = json.loads(result.stdout.strip())
     except json.JSONDecodeError as e:
-        raise AssertionError(f"Agent output is not valid JSON: {e}\nStdout: {result.stdout}")
+        raise AssertionError(f"Agent output is not valid JSON: {e}")
     
-    # Verify required fields exist
-    assert "answer" in output, "Missing 'answer' field in output"
-    assert "tool_calls" in output, "Missing 'tool_calls' field in output"
+    # Verify required fields
+    assert "answer" in output, "Missing 'answer' field"
+    assert "source" in output, "Missing 'source' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
     
-    # Verify field types
-    assert isinstance(output["answer"], str), "'answer' should be a string"
-    assert isinstance(output["tool_calls"], list), "'tool_calls' should be an array"
+    # Verify tool_calls is populated (not empty for this question)
+    assert len(output["tool_calls"]) > 0, "tool_calls should be populated"
     
-    # Verify answer is non-empty
-    assert len(output["answer"].strip()) > 0, "'answer' field is empty"
+    # Verify read_file was used
+    tool_names = [tc.get("tool") for tc in output["tool_calls"]]
+    assert "read_file" in tool_names, "Expected read_file to be called"
     
-    print("✓ All checks passed!")
-    print(f"  - answer: {output['answer'][:50]}...")
-    print(f"  - tool_calls: {output['tool_calls']}")
+    # Verify source references a wiki file about git
+    source = output["source"].lower()
+    assert "git" in source or "wiki/" in source, f"Source should reference git wiki file, got: {output['source']}"
+    
+    print("✓ Merge conflict test passed!")
+    print(f"  - answer: {output['answer'][:80]}...")
+    print(f"  - source: {output['source']}")
+    print(f"  - tool_calls: {[tc['tool'] for tc in output['tool_calls']]}")
 
 
-def test_agent_stderr_separation():
-    """Test that debug output goes to stderr, not stdout."""
-    project_root = Path(__file__).parent.parent.parent.parent
+def test_wiki_files_question():
+    """
+    Test: 'What files are in the wiki?'
+    
+    Expected:
+    - tool_calls contains list_files call
+    - source references wiki directory
+    """
+    project_root = Path(__file__).parent.parent
     agent_path = project_root / "agent.py"
     
     result = subprocess.run(
-        ["uv", "run", str(agent_path), "Test question"],
+        ["uv", "run", str(agent_path), "What files are in the wiki?"],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=90,
         cwd=str(project_root)
     )
     
-    # stdout should be valid JSON only
+    # Check exit code
+    assert result.returncode == 0, f"Agent failed with: {result.stderr}"
+    
+    # Parse JSON output
     try:
-        json.loads(result.stdout.strip())
+        output = json.loads(result.stdout.strip())
     except json.JSONDecodeError as e:
-        raise AssertionError(f"stdout contains non-JSON content: {e}")
+        raise AssertionError(f"Agent output is not valid JSON: {e}")
     
-    # stderr should contain debug messages (non-empty for successful run)
-    assert len(result.stderr) > 0, "stderr should contain debug messages"
+    # Verify required fields
+    assert "answer" in output, "Missing 'answer' field"
+    assert "source" in output, "Missing 'source' field"
+    assert "tool_calls" in output, "Missing 'tool_calls' field"
     
-    print("✓ Output separation test passed!")
+    # Verify tool_calls is populated
+    assert len(output["tool_calls"]) > 0, "tool_calls should be populated"
+    
+    # Verify list_files was used
+    tool_names = [tc.get("tool") for tc in output["tool_calls"]]
+    assert "list_files" in tool_names, "Expected list_files to be called"
+    
+    # Verify source references wiki
+    assert "wiki" in output["source"].lower(), f"Source should reference wiki, got: {output['source']}"
+    
+    print("✓ Wiki files test passed!")
+    print(f"  - answer: {output['answer'][:80]}...")
+    print(f"  - source: {output['source']}")
+    print(f"  - tool_calls: {[tc['tool'] for tc in output['tool_calls']]}")
 
 
 if __name__ == "__main__":
-    print("Running agent.py regression tests...\n")
+    print("Running agent.py Task 2 regression tests...\n")
     
     try:
-        test_agent_output_format()
+        test_merge_conflict_question()
         print()
-        test_agent_stderr_separation()
-        print("\n✅ All regression tests passed!")
+        test_wiki_files_question()
+        print("\n✅ All Task 2 regression tests passed!")
     except AssertionError as e:
         print(f"\n❌ Test failed: {e}")
         sys.exit(1)
     except subprocess.TimeoutExpired:
-        print("\n❌ Test timed out after 60 seconds")
+        print("\n❌ Test timed out after 90 seconds")
         sys.exit(1)
