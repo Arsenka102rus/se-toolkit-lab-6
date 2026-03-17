@@ -1,10 +1,10 @@
 """
-Regression tests for agent.py (Task 2: Documentation Agent)
+Regression tests for agent.py (Task 3: System Agent)
 
 Tests verify that the agent:
-1. Uses tools (read_file, list_files) correctly
+1. Uses tools (read_file, list_files, query_api) correctly
 2. Returns valid JSON with answer, source, and tool_calls fields
-3. Correctly identifies sources in the wiki
+3. Correctly identifies sources in the wiki or API
 """
 
 import json
@@ -13,19 +13,19 @@ import sys
 from pathlib import Path
 
 
-def test_merge_conflict_question():
+def test_framework_question():
     """
-    Test: 'How do you resolve a merge conflict?'
+    Test: 'What Python web framework does the backend use?'
     
     Expected:
     - tool_calls contains read_file call
-    - source contains wiki/git-workflow.md or wiki/git-vscode.md
+    - answer contains 'FastAPI'
     """
     project_root = Path(__file__).parent.parent
     agent_path = project_root / "agent.py"
     
     result = subprocess.run(
-        ["uv", "run", str(agent_path), "How do you resolve a merge conflict?"],
+        ["uv", "run", str(agent_path), "What Python web framework does the backend use?"],
         capture_output=True,
         text=True,
         timeout=90,
@@ -43,39 +43,37 @@ def test_merge_conflict_question():
     
     # Verify required fields
     assert "answer" in output, "Missing 'answer' field"
-    assert "source" in output, "Missing 'source' field"
     assert "tool_calls" in output, "Missing 'tool_calls' field"
     
-    # Verify tool_calls is populated (not empty for this question)
+    # Verify tool_calls is populated
     assert len(output["tool_calls"]) > 0, "tool_calls should be populated"
     
     # Verify read_file was used
     tool_names = [tc.get("tool") for tc in output["tool_calls"]]
     assert "read_file" in tool_names, "Expected read_file to be called"
     
-    # Verify source references a wiki file about git
-    source = output["source"].lower()
-    assert "git" in source or "wiki/" in source, f"Source should reference git wiki file, got: {output['source']}"
+    # Verify answer contains FastAPI
+    answer_lower = output["answer"].lower()
+    assert "fastapi" in answer_lower, f"Answer should mention FastAPI, got: {output['answer'][:100]}"
     
-    print("✓ Merge conflict test passed!")
+    print("✓ Framework question test passed!")
     print(f"  - answer: {output['answer'][:80]}...")
-    print(f"  - source: {output['source']}")
     print(f"  - tool_calls: {[tc['tool'] for tc in output['tool_calls']]}")
 
 
-def test_wiki_files_question():
+def test_database_items_question():
     """
-    Test: 'What files are in the wiki?'
+    Test: 'How many items are in the database?'
     
     Expected:
-    - tool_calls contains list_files call
-    - source references wiki directory
+    - tool_calls contains query_api call OR read_file to explore backend
+    - answer attempts to answer the question
     """
     project_root = Path(__file__).parent.parent
     agent_path = project_root / "agent.py"
     
     result = subprocess.run(
-        ["uv", "run", str(agent_path), "What files are in the wiki?"],
+        ["uv", "run", str(agent_path), "How many items are in the database?"],
         capture_output=True,
         text=True,
         timeout=90,
@@ -93,33 +91,30 @@ def test_wiki_files_question():
     
     # Verify required fields
     assert "answer" in output, "Missing 'answer' field"
-    assert "source" in output, "Missing 'source' field"
     assert "tool_calls" in output, "Missing 'tool_calls' field"
     
-    # Verify tool_calls is populated
+    # Verify tool_calls is populated (agent tried to answer)
     assert len(output["tool_calls"]) > 0, "tool_calls should be populated"
     
-    # Verify list_files was used
+    # Verify either query_api was used OR read_file to explore backend
     tool_names = [tc.get("tool") for tc in output["tool_calls"]]
-    assert "list_files" in tool_names, "Expected list_files to be called"
+    has_query_api = "query_api" in tool_names
+    has_read_file = "read_file" in tool_names
+    assert has_query_api or has_read_file, "Expected query_api or read_file to be called"
     
-    # Verify source references wiki
-    assert "wiki" in output["source"].lower(), f"Source should reference wiki, got: {output['source']}"
-    
-    print("✓ Wiki files test passed!")
+    print("✓ Database items question test passed!")
     print(f"  - answer: {output['answer'][:80]}...")
-    print(f"  - source: {output['source']}")
     print(f"  - tool_calls: {[tc['tool'] for tc in output['tool_calls']]}")
 
 
 if __name__ == "__main__":
-    print("Running agent.py Task 2 regression tests...\n")
+    print("Running agent.py Task 3 regression tests...\n")
     
     try:
-        test_merge_conflict_question()
+        test_framework_question()
         print()
-        test_wiki_files_question()
-        print("\n✅ All Task 2 regression tests passed!")
+        test_database_items_question()
+        print("\n✅ All Task 3 regression tests passed!")
     except AssertionError as e:
         print(f"\n❌ Test failed: {e}")
         sys.exit(1)
