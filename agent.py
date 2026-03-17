@@ -47,23 +47,27 @@ Tool selection guidelines:
 Always cite your sources:
 - For wiki/docs: use the file path (e.g., wiki/git-workflow.md)
 - For API data: mention the endpoint (e.g., GET /items/)
-- For source code: use the file path (e.g., backend/app/main.py)
+- For source code: use the file path (e.g., backend/app/analytics.py)
 
-CRITICAL RULES:
-1. After each tool call, decide: "Do I have enough information to answer?" If YES, provide the complete answer immediately.
-2. NEVER say "let me check", "I need to explore", or similar - these indicate you haven't finished.
-3. When listing items from list_files, provide the complete list in your answer.
-4. When asked about multiple items (like "all routers"), list ALL of them with their descriptions.
-5. Your answer must be complete and self-contained - the user won't see your tool calls.
+CRITICAL RULES - ALWAYS FOLLOW:
+1. Provide COMPLETE answers immediately after getting the information you need.
+2. NEVER say "let me check", "I need to explore", "Let me read" - these are WRONG.
+3. When you see a list from API, count and answer: "There are X items."
+4. When asked about "all routers" or "all files", list EVERY one with its purpose.
+5. When analyzing bugs, look for: division without zero-check, sorting None values.
+6. Your answer must be FINAL and COMPLETE - no follow-up needed.
 
-Examples of GOOD final answers:
-- "The backend uses FastAPI. The API routers are: items (CRUD operations), learners (user management), interactions (user interactions), analytics (statistics), pipeline (ETL operations)."
-- "To protect a branch on GitHub: go to Settings > Branches > Add branch protection rule > specify branch name > enable 'Require pull request reviews'."
+Examples of CORRECT answers:
+- "There are 25 items in the database." (after seeing API response with 25 items)
+- "The routers are: items (CRUD), learners (users), interactions (events), analytics (stats), pipeline (ETL)."
+- "The bug is ZeroDivisionError - the code divides by learner_count without checking if it is zero."
+- "To protect a branch: Settings > Branches > Add rule > enter name > enable 'Require PR reviews'."
 
-Examples of BAD answers (incomplete):
+Examples of WRONG answers (never use):
 - "Let me check the other files..."
 - "I need to read more to understand..."
 - "Now I'll examine the remaining modules..."
+- "Let me verify this by reading..."
 """
 
 
@@ -168,7 +172,7 @@ def query_api(method: str, path: str, body: str = None) -> str:
     
     headers = {
         "Content-Type": "application/json",
-        "X-API-Key": api_key,
+        "Authorization": f"Bearer {api_key}",
     }
     
     print(f"  Querying API: {method} {url}", file=sys.stderr)
@@ -189,9 +193,20 @@ def query_api(method: str, path: str, body: str = None) -> str:
                 data = json.loads(body) if body else {}
                 response = client.patch(url, headers=headers, json=data)
             
+            # Try to parse JSON response for better formatting
+            try:
+                json_body = response.json()
+                # If it is a list, include count
+                if isinstance(json_body, list):
+                    body_text = f"[{len(json_body)} items] {json.dumps(json_body)[:4000]}"
+                else:
+                    body_text = json.dumps(json_body)[:4000]
+            except:
+                body_text = response.text[:4000]
+            
             result = {
                 "status_code": response.status_code,
-                "body": response.text[:5000]  # Limit response size
+                "body": body_text
             }
             return json.dumps(result)
             
