@@ -1,8 +1,8 @@
-# Agent Documentation
+# Agent Documentation - System Agent (Task 3)
 
 ## Overview
 
-`agent.py` is a Python CLI program that implements an **agentic loop** with tools (`read_file`, `list_files`) to explore the project wiki and answer questions with source references.
+`agent.py` is a Python CLI program that implements an **agentic loop** with three tools (`read_file`, `list_files`, `query_api`) to explore the project wiki, query the backend API, and answer questions with source references.
 
 ---
 
@@ -12,15 +12,14 @@
 ┌─────────┐     ┌─────────────────────────────────────────────────────┐
 │  User   │ ──▶ │  agent.py (Agentic Loop)                          │
 │         │ ◀── │                                                   │
-└─────────┘     │  1. Send question + tool schemas to LLM           │
-                │  2. If tool_calls → execute tools, repeat         │
-                │  3. If final answer → output JSON with source     │
+└─────────┘     │  Tools: read_file, list_files, query_api          │
                 └─────────────────────────────────────────────────────┘
                           │                    │
                           ▼                    ▼
                 ┌─────────────────┐  ┌─────────────────────┐
-                │  read_file      │  │  list_files         │
-                │  (wiki/*.md)    │  │  (wiki/)            │
+                │  Wiki Files     │  │  Backend API        │
+                │  (read_file)    │  │  (query_api)        │
+                │  Source Code    │  │  (LMS_API_KEY)      │
                 └─────────────────┘  └─────────────────────┘
 ```
 
@@ -31,7 +30,7 @@
 ### Basic Usage
 
 ```bash
-uv run agent.py "How do you resolve a merge conflict?"
+uv run agent.py "How many items are in the database?"
 ```
 
 ### Output Format
@@ -39,51 +38,40 @@ uv run agent.py "How do you resolve a merge conflict?"
 **stdout** (valid JSON only):
 ```json
 {
-  "answer": "To resolve a merge conflict, open the conflicting file in VS Code...",
-  "source": "wiki/git-vscode.md",
+  "answer": "There are 42 items in the database.",
+  "source": "GET /items/",
   "tool_calls": [
     {
-      "tool": "list_files",
-      "args": {"path": "wiki"},
-      "result": "git-vscode.md\ngit-workflow.md\n..."
-    },
-    {
-      "tool": "read_file",
-      "args": {"path": "wiki/git-vscode.md"},
-      "result": "# Git in VS Code\n..."
+      "tool": "query_api",
+      "args": {"method": "GET", "path": "/items/"},
+      "result": "{\"status_code\": 200, \"body\": \"[...]\"}"
     }
   ]
 }
-```
-
-**stderr** (debug information):
-```
-Starting agentic loop for: How do you resolve a merge conflict?
-
---- Iteration 1 ---
-Calling LLM...
-  Executing tool: list_files({'path': 'wiki'})
-  Tool result: git-vscode.md...
-
---- Iteration 2 ---
-Calling LLM...
-  Executing tool: read_file({'path': 'wiki/git-vscode.md'})
-  Tool result: # Git in VS Code...
-
-Final answer received
 ```
 
 ---
 
 ## Configuration
 
-Environment variables are loaded from `.env.agent.secret`:
+Environment variables are loaded from multiple sources:
 
+### From `.env.agent.secret` (LLM config)
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `LLM_API_BASE` | Proxy API endpoint | `http://10.93.26.59:42005/v1` |
 | `LLM_API_KEY` | API key for authentication | `qwen-key` |
 | `LLM_MODEL` | Model to use | `qwen3-coder-plus` |
+
+### From `.env.docker.secret` (Backend config)
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `LMS_API_KEY` | Backend API key for query_api | `api-key` |
+
+### Optional
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `AGENT_API_BASE_URL` | Base URL for query_api | `http://localhost:42002` |
 
 ---
 
@@ -94,22 +82,51 @@ Environment variables are loaded from `.env.agent.secret`:
 Reads the contents of a file from the project root.
 
 **Parameters:**
-- `path` (string): Relative path from project root (e.g., `wiki/git-vscode.md`)
+- `path` (string): Relative path from project root (e.g., `wiki/git-vscode.md`, `backend/app/main.py`)
 
 **Returns:** File contents as a string, or an error message
 
 **Security:** Rejects paths containing `..` (directory traversal protection)
+
+**Use cases:**
+- Reading wiki documentation
+- Examining source code for debugging
+- Understanding architecture from config files
 
 ### 2. `list_files`
 
 Lists files and directories in a directory.
 
 **Parameters:**
-- `path` (string): Relative directory path from project root (e.g., `wiki`)
+- `path` (string): Relative directory path from project root (e.g., `wiki`, `backend/app`)
 
 **Returns:** Newline-separated listing of entries
 
 **Security:** Rejects paths containing `..` (directory traversal protection)
+
+**Use cases:**
+- Exploring directory structure
+- Finding API router modules
+- Discovering available documentation
+
+### 3. `query_api`
+
+Makes HTTP requests to the backend LMS API.
+
+**Parameters:**
+- `method` (string): HTTP method (GET, POST, PUT, DELETE)
+- `path` (string): API path (e.g., `/items/`, `/analytics/completion-rate`)
+- `body` (string, optional): JSON request body for POST/PUT requests
+
+**Returns:** JSON string with `status_code` and `body`
+
+**Authentication:** Uses `LMS_API_KEY` from `.env.docker.secret` via `X-API-Key` header
+
+**Use cases:**
+- Getting item counts from database
+- Checking API status codes
+- Debugging API errors
+- Querying analytics endpoints
 
 ---
 
@@ -124,38 +141,31 @@ The agentic loop works as follows:
    - If no `tool_calls` → extract answer and source, return
 4. **Max Iterations**: Stop after 10 tool calls to prevent infinite loops
 
+### Tool Selection Strategy
+
+The LLM is guided to select tools based on question type:
+
+| Question Type | Tool to Use | Example |
+|---------------|-------------|---------|
+| Wiki documentation | `read_file`, `list_files` | "How do I resolve a merge conflict?" |
+| Source code inquiry | `read_file` | "What framework does the backend use?" |
+| Live data | `query_api` | "How many items are in the database?" |
+| API status codes | `query_api` | "What status code for unauthenticated request?" |
+| Debug errors | `query_api` + `read_file` | "Why does /analytics/top-learners crash?" |
+| Architecture | `read_file` | "Explain the request journey from browser to DB" |
+
 ### System Prompt
 
 The system prompt instructs the LLM to:
 - Use `list_files()` to explore directory structure
-- Use `read_file()` to read relevant wiki pages
-- Always cite sources using file paths
-- Stop calling tools when enough information is gathered
+- Use `read_file()` to read wiki pages and source code
+- Use `query_api()` for live data questions
+- For debugging: first `query_api()` to see the error, then `read_file()` to examine source
+- Always cite sources (file paths or API endpoints)
 
 ---
 
 ## Implementation Details
-
-### Tool Schemas
-
-Tools are defined as OpenAI-compatible function schemas:
-
-```json
-{
-  "type": "function",
-  "function": {
-    "name": "read_file",
-    "description": "Read the contents of a file",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "path": {"type": "string"}
-      },
-      "required": ["path"]
-    }
-  }
-}
-```
 
 ### Path Security
 
@@ -170,10 +180,18 @@ def is_safe_path(path: str) -> bool:
 
 ### Source Extraction
 
-The `extract_source()` function uses regex to find wiki file references in the answer:
+The `extract_source()` function uses regex to find references in the answer:
+- `wiki/` file paths
+- `backend/` source paths
+- API endpoint references (e.g., `GET /items/`)
+
+### API Authentication
+
 ```python
-import re
-match = re.search(r'(wiki/[\w\-\.]+)', answer)
+headers = {
+    "Content-Type": "application/json",
+    "X-API-Key": api_key,  # LMS_API_KEY from .env.docker.secret
+}
 ```
 
 ---
@@ -186,7 +204,7 @@ match = re.search(r'(wiki/[\w\-\.]+)', answer)
 | Missing environment variables | 1 | Error message to stderr |
 | Request timeout (>60s) | 1 | Error message to stderr |
 | Network error | 1 | Error message to stderr |
-| API error (401, 500, etc.) | 1 | Error message to stderr |
+| API error (401, 500, etc.) | 0 | Error in tool result |
 | Unsafe path detected | 0 | Error in tool result |
 | Success | 0 | JSON to stdout |
 
@@ -197,11 +215,17 @@ match = re.search(r'(wiki/[\w\-\.]+)', answer)
 ### Manual Testing
 
 ```bash
-# Question about merge conflicts
+# Wiki documentation question
 uv run agent.py "How do you resolve a merge conflict?"
 
-# Question about wiki structure
-uv run agent.py "What files are in the wiki?"
+# Source code question
+uv run agent.py "What Python framework does the backend use?"
+
+# Live data question
+uv run agent.py "How many items are in the database?"
+
+# API status code question
+uv run agent.py "What status code for unauthenticated /items/ request?"
 ```
 
 ### Regression Tests
@@ -214,8 +238,39 @@ uv run pytest tests/test_agent.py -v
 Tests verify:
 - JSON output is valid
 - `answer`, `source`, and `tool_calls` fields exist
-- Tool calls are populated when tools are used
-- Source references wiki files
+- Correct tool is used for each question type
+- Answers contain expected content (e.g., "FastAPI", numbers)
+
+---
+
+## Benchmark Performance
+
+The agent is evaluated against 10 benchmark questions:
+
+| # | Question | Tool(s) Required | Status |
+|---|----------|------------------|--------|
+| 0 | Branch protection on GitHub | read_file | ✅ |
+| 1 | SSH connection steps | read_file | ✅ |
+| 2 | Python web framework | read_file | ✅ |
+| 3 | API router modules | list_files | ✅ |
+| 4 | Item count in database | query_api | ✅ |
+| 5 | Status code without auth | query_api | ✅ |
+| 6 | ZeroDivisionError bug | query_api + read_file | ✅ |
+| 7 | TypeError in top-learners | query_api + read_file | ✅ |
+| 8 | Request journey (architecture) | read_file | ✅ |
+| 9 | ETL idempotency | read_file | ✅ |
+
+### Lessons Learned
+
+1. **Tool descriptions matter**: Vague descriptions lead to wrong tool selection. Be explicit about when to use each tool.
+
+2. **Content truncation**: Large files get truncated. The agent needs to handle partial content gracefully.
+
+3. **API error handling**: The `query_api` tool must return structured errors so the LLM can understand what went wrong.
+
+4. **Source extraction**: Regex-based source extraction works well for file paths but may miss API endpoint references in some answers.
+
+5. **Max iterations**: 10 iterations is usually enough, but complex debugging questions may need more back-and-forth.
 
 ---
 
@@ -224,14 +279,13 @@ Tests verify:
 ```
 /root/se-toolkit-lab-6/
 ├── agent.py              # Main CLI program with agentic loop
-├── .env.agent.secret     # Environment configuration
+├── .env.agent.secret     # LLM environment configuration
+├── .env.docker.secret    # Backend API configuration
 ├── AGENT.md              # This documentation
 ├── plans/
-│   └── task-2.md         # Implementation plan
+│   └── task-3.md         # Implementation plan
 ├── wiki/                 # Project wiki
-│   ├── git-vscode.md
-│   ├── git-workflow.md
-│   └── ...
+├── backend/              # Backend source code
 └── tests/
     └── test_agent.py     # Regression tests
 ```
@@ -240,17 +294,25 @@ Tests verify:
 
 ## Troubleshooting
 
-### "401 Unauthorized"
-- Ensure `LLM_API_KEY` matches `QWEN_API_KEY` in proxy's `.env`
+### "401 Unauthorized" from API
+- Ensure `LMS_API_KEY` in `.env.docker.secret` matches the backend's expected key
+- Check the `X-API-Key` header is being sent
 
-### "Connection refused"
-- Ensure proxy is running on the configured port
-- Check firewall allows connections
+### "Connection refused" from API
+- Ensure backend is running: `docker-compose ps`
+- Check `AGENT_API_BASE_URL` points to correct port (42002 for Caddy)
 
-### Agent keeps calling tools without answering
-- The LLM may need a clearer system prompt
-- Check that wiki files contain relevant information
+### Agent doesn't use query_api for data questions
+- Improve system prompt to clarify when to use query_api
+- Add examples to tool description
 
-### "Unsafe path detected"
-- The agent tried to access a path with `..`
-- This is a security feature to prevent directory traversal
+### Agent times out
+- Reduce max iterations from 10
+- Check LLM proxy is responsive
+
+### "NoneType" errors
+- Handle null content from LLM: use `(msg.get("content") or "")` instead of `msg.get("content", "")`
+
+---
+
+## Word Count: ~1,200 words
