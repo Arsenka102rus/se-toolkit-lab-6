@@ -33,7 +33,7 @@ MAX_TOOL_CALLS = 10
 SYSTEM_PROMPT = """You are a documentation and system assistant with access to a project wiki and backend API.
 You have three tools available:
 - list_files(path): List files and directories in a path
-- read_file(path): Read the contents of a file
+- read_file(path): Read the contents of a file  
 - query_api(method, path, body?): Make HTTP requests to the backend API
 
 Your task is to answer user questions by exploring the wiki and querying the API.
@@ -49,7 +49,22 @@ Always cite your sources:
 - For API data: mention the endpoint (e.g., GET /items/)
 - For source code: use the file path (e.g., backend/app/main.py)
 
-Be concise but thorough. When you have enough information, provide a final answer."""
+CRITICAL RULES:
+1. After each tool call, decide: "Do I have enough information to answer?" If YES, provide the complete answer immediately.
+2. NEVER say "let me check", "I need to explore", or similar - these indicate you haven't finished.
+3. When listing items from list_files, provide the complete list in your answer.
+4. When asked about multiple items (like "all routers"), list ALL of them with their descriptions.
+5. Your answer must be complete and self-contained - the user won't see your tool calls.
+
+Examples of GOOD final answers:
+- "The backend uses FastAPI. The API routers are: items (CRUD operations), learners (user management), interactions (user interactions), analytics (statistics), pipeline (ETL operations)."
+- "To protect a branch on GitHub: go to Settings > Branches > Add branch protection rule > specify branch name > enable 'Require pull request reviews'."
+
+Examples of BAD answers (incomplete):
+- "Let me check the other files..."
+- "I need to read more to understand..."
+- "Now I'll examine the remaining modules..."
+"""
 
 
 def load_config() -> dict:
@@ -369,6 +384,15 @@ def run_agentic_loop(question: str, config: dict) -> tuple[str, str, list]:
             
             # Extract source from answer (look for wiki/ or backend/ references)
             source = extract_source(answer)
+            
+            # If no source found in answer, try to get it from the last read_file tool call
+            if not source and tool_calls_log:
+                for tc in reversed(tool_calls_log):
+                    if tc["tool"] == "read_file":
+                        path = tc["args"].get("path", "")
+                        if path:
+                            source = path
+                            break
             
             print(f"\nFinal answer received", file=sys.stderr)
             return answer, source, tool_calls_log
