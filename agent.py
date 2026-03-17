@@ -437,26 +437,31 @@ def extract_source(answer: str) -> str:
 def main():
     """Main entry point for the agent CLI."""
     if len(sys.argv) != 2:
-        print("Usage: uv run agent.py \"<your question>\"", file=sys.stderr)
+        print(json.dumps({"error": "Usage: agent.py <question>"}), file=sys.stdout)
         sys.exit(1)
     
-    question = sys.argv[1]
-    
-    # Load configuration
-    config = load_config()
-    
-    # Run the agentic loop
-    answer, source, tool_calls = run_agentic_loop(question, config)
-    
-    # Build the structured response
-    response = {
-        "answer": answer,
-        "source": source,
-        "tool_calls": tool_calls
-    }
-    
-    # Output only valid JSON to stdout
-    print(json.dumps(response, ensure_ascii=False, indent=2))
+    try:
+        question = sys.argv[1]
+        
+        # Load configuration
+        config = load_config()
+        
+        # Run the agentic loop
+        answer, source, tool_calls = run_agentic_loop(question, config)
+        
+        # Build the structured response
+        response = {
+            "answer": answer,
+            "source": source,
+            "tool_calls": tool_calls
+        }
+        
+        # Output only valid JSON to stdout
+        print(json.dumps(response, ensure_ascii=False))
+    except Exception as e:
+        # Always output valid JSON even on error
+        print(json.dumps({"answer": f"Error: {str(e)}", "source": "", "tool_calls": []}))
+        sys.exit(0)
 
 
 if __name__ == "__main__":
